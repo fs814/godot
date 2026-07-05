@@ -217,8 +217,14 @@ DisplayServerMacOSEmbedded::DisplayServerMacOSEmbedded(const String &p_rendering
 	ca_context.layer = layer;
 
 	{
-		Array arr = { ca_context.contextId };
-		EngineDebugger::get_singleton()->send_message("game_view:set_context_id", arr);
+		// fs patch: EngineDebugger is only present when launched as a child of
+		// the Godot editor (the normal embedded case).  For in-process embedding
+		// (Emacs xwidget) there is no debugger, so guard the null singleton --
+		// the host obtains the contextId via window_get_native_handle instead.
+		if (EngineDebugger::get_singleton()) {
+			Array arr = { ca_context.contextId };
+			if (EngineDebugger::get_singleton()) { EngineDebugger::get_singleton()->send_message("game_view:set_context_id", arr); } // fs patch: no debugger when embedded in-process
+		}
 	}
 }
 
@@ -274,10 +280,26 @@ void DisplayServerMacOSEmbedded::register_embedded_driver() {
 	register_create_function("embedded", create_func, get_rendering_drivers_func);
 }
 
+// fs patch: return the CAContext id as the "window handle" so an in-process
+// host (Emacs xwidget) can construct a CALayerHost bound to it and display the
+// engine's rendered layer.  Other handle types are unsupported here.
+int64_t DisplayServerMacOSEmbedded::window_get_native_handle(DisplayServerEnums::HandleType p_handle_type, DisplayServerEnums::WindowID p_window) const {
+	switch (p_handle_type) {
+		case DisplayServerEnums::WINDOW_HANDLE: {
+			return ca_context ? (int64_t)ca_context.contextId : 0;
+		}
+		case DisplayServerEnums::WINDOW_VIEW: {
+			return (int64_t)(uintptr_t)layer;
+		}
+		default:
+			return 0;
+	}
+}
+
 // MARK: - Mouse
 
 void DisplayServerMacOSEmbedded::_mouse_apply_mode(DisplayServerEnums::MouseMode p_prev_mode, DisplayServerEnums::MouseMode p_new_mode) {
-	EngineDebugger::get_singleton()->send_message("game_view:mouse_set_mode", { p_new_mode });
+	if (EngineDebugger::get_singleton()) { EngineDebugger::get_singleton()->send_message("game_view:mouse_set_mode", { p_new_mode }); } // fs patch: no debugger when embedded in-process
 }
 
 void DisplayServerMacOSEmbedded::warp_mouse(const Point2i &p_position) {
@@ -285,7 +307,7 @@ void DisplayServerMacOSEmbedded::warp_mouse(const Point2i &p_position) {
 	Input::get_singleton()->set_mouse_position(p_position);
 	// Convert from game pixels to points for the editor.
 	float inv_scale = 1.0f / screen_get_max_scale();
-	EngineDebugger::get_singleton()->send_message("game_view:warp_mouse", { Point2i(Vector2(p_position) * inv_scale) });
+	if (EngineDebugger::get_singleton()) { EngineDebugger::get_singleton()->send_message("game_view:warp_mouse", { Point2i(Vector2(p_position) * inv_scale) }); } // fs patch: no debugger when embedded in-process
 }
 
 Point2i DisplayServerMacOSEmbedded::mouse_get_position() const {
@@ -689,14 +711,14 @@ bool DisplayServerMacOSEmbedded::can_any_window_draw() const {
 }
 
 void DisplayServerMacOSEmbedded::window_set_ime_active(const bool p_active, DisplayServerEnums::WindowID p_window) {
-	EngineDebugger::get_singleton()->send_message("game_view:window_set_ime_active", { p_active });
+	if (EngineDebugger::get_singleton()) { EngineDebugger::get_singleton()->send_message("game_view:window_set_ime_active", { p_active }); } // fs patch: no debugger when embedded in-process
 }
 
 void DisplayServerMacOSEmbedded::window_set_ime_position(const Point2i &p_pos, DisplayServerEnums::WindowID p_window) {
 	if (p_pos == ime_last_position) {
 		return;
 	}
-	EngineDebugger::get_singleton()->send_message("game_view:window_set_ime_position", { p_pos });
+	if (EngineDebugger::get_singleton()) { EngineDebugger::get_singleton()->send_message("game_view:window_set_ime_position", { p_pos }); } // fs patch: no debugger when embedded in-process
 	ime_last_position = p_pos;
 }
 
@@ -792,7 +814,7 @@ DisplayServerEnums::VSyncMode DisplayServerMacOSEmbedded::window_get_vsync_mode(
 
 void DisplayServerMacOSEmbedded::cursor_set_shape(DisplayServerEnums::CursorShape p_shape) {
 	cursor_shape = p_shape;
-	EngineDebugger::get_singleton()->send_message("game_view:cursor_set_shape", { p_shape });
+	if (EngineDebugger::get_singleton()) { EngineDebugger::get_singleton()->send_message("game_view:cursor_set_shape", { p_shape }); } // fs patch: no debugger when embedded in-process
 }
 
 void DisplayServerMacOSEmbedded::cursor_set_custom_image(const Ref<Resource> &p_cursor, DisplayServerEnums::CursorShape p_shape, const Vector2 &p_hotspot) {
@@ -803,7 +825,7 @@ void DisplayServerMacOSEmbedded::cursor_set_custom_image(const Ref<Resource> &p_
 			data = image->save_png_to_buffer();
 		}
 	}
-	EngineDebugger::get_singleton()->send_message("game_view:cursor_set_custom_image", { data, p_shape, p_hotspot });
+	if (EngineDebugger::get_singleton()) { EngineDebugger::get_singleton()->send_message("game_view:cursor_set_custom_image", { data, p_shape, p_hotspot }); } // fs patch: no debugger when embedded in-process
 }
 
 void DisplayServerMacOSEmbedded::swap_buffers() {

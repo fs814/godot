@@ -137,6 +137,11 @@ public:
 	virtual void send_window_event_by_id(DisplayServerEnums::WindowEvent p_event, DisplayServerEnums::WindowID p_id = DisplayServerEnums::MAIN_WINDOW_ID) const override;
 	void _window_callback(const Callable &p_callable, const Variant &p_arg) const;
 
+	// fs patch: expose the CAContext id (WINDOW_HANDLE) so an in-process host
+	// (e.g. Emacs xwidget) can display the rendered layer via a CALayerHost,
+	// instead of only receiving it through the editor debugger message.
+	virtual int64_t window_get_native_handle(DisplayServerEnums::HandleType p_handle_type, DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) const override;
+
 	// MARK: - Mouse
 	virtual void warp_mouse(const Point2i &p_position) override;
 	virtual Point2i mouse_get_position() const override;

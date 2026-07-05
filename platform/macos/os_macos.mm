@@ -1350,4 +1350,44 @@ OS_MacOS_Embedded::OS_MacOS_Embedded(const char *p_execpath, int p_argc, char **
 	DisplayServerMacOSEmbedded::register_embedded_driver();
 }
 
+// fs patch: resolve the standalone Godot editor binary to spawn instead of the
+// host app bundle.  $GODOT_EMBEDDED_SPAWN_BINARY overrides; otherwise derive it
+// from the loaded libgodot dylib path (e.g.
+// .../bin/libgodot.macos.editor.arm64.dylib -> .../bin/godot.macos.editor.arm64).
+static String _embedded_standalone_godot_path() {
+	const char *env = getenv("GODOT_EMBEDDED_SPAWN_BINARY");
+	if (env && *env) {
+		return String::utf8(env);
+	}
+	// dladdr on an address inside this dylib gives us the dylib's own path.
+	Dl_info info;
+	if (dladdr((const void *)&_embedded_standalone_godot_path, &info) != 0 && info.dli_fname) {
+		String dylib_path = String::utf8(info.dli_fname);
+		String dir = dylib_path.get_base_dir();
+		String file = dylib_path.get_file(); // libgodot.macos.editor.arm64.dylib
+		if (file.begins_with("lib")) {
+			file = file.substr(3);
+		}
+		if (file.ends_with(".dylib")) {
+			file = file.substr(0, file.length() - 6);
+		}
+		return dir.path_join(file); // godot.macos.editor.arm64
+	}
+	return String();
+}
+
+Error OS_MacOS_Embedded::create_instance(const List<String> &p_arguments, ProcessID *r_child_id) {
+	String godot_path = _embedded_standalone_godot_path();
+	if (godot_path.is_empty() || !FileAccess::exists(godot_path)) {
+		ERR_PRINT(vformat("Embedded Godot: cannot spawn a new instance -- standalone editor binary not found (looked for '%s'). "
+						  "Set $GODOT_EMBEDDED_SPAWN_BINARY to the Godot editor binary. Not launching the host app.",
+				godot_path));
+		return ERR_FILE_NOT_FOUND;
+	}
+	// Launch the standalone Godot editor (a plain binary, not an .app bundle),
+	// so opening a project / running a scene / restarting the editor does NOT
+	// relaunch the embedding host (e.g. emacs-fswork).
+	return OS_Unix::create_process(godot_path, p_arguments, r_child_id, false);
+}
+
 #endif

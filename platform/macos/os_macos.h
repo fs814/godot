@@ -215,6 +215,14 @@ class OS_MacOS_Embedded : public OS_MacOS {
 public:
 	virtual void run() override;
 
+	// fs patch: when embedded in a host app (Emacs xwidget), the base
+	// create_instance relaunches the host's .app bundle (NSBundle mainBundle) --
+	// which would spawn another host process (e.g. a second emacs-fswork) instead
+	// of Godot -- when the editor opens a project / runs a scene / restarts.
+	// Redirect those spawns to the standalone Godot editor binary sitting beside
+	// the loaded libgodot dylib.
+	virtual Error create_instance(const List<String> &p_arguments, ProcessID *r_child_id = nullptr) override;
+
 	OS_MacOS_Embedded(const char *p_execpath, int p_argc, char **p_argv);
 };
 
